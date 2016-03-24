@@ -1,8 +1,10 @@
 package gabs
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -33,6 +35,52 @@ func TestBasic(t *testing.T) {
 		}
 	} else {
 		t.Errorf("Didn't find test2")
+	}
+
+	if result := val.Bytes(); string(result) != string(sample) {
+		t.Errorf("Wrong []byte conversion: %s != %s", result, sample)
+	}
+}
+
+func TestExists(t *testing.T) {
+	sample := []byte(`{"test":{"value":10},"test2":20}`)
+
+	val, err := ParseJSON(sample)
+	if err != nil {
+		t.Errorf("Failed to parse: %v", err)
+		return
+	}
+
+	paths := []struct {
+		Path   []string
+		Exists bool
+	}{
+		{[]string{"one", "two", "three"}, false},
+		{[]string{"test"}, true},
+		{[]string{"test", "value"}, true},
+		{[]string{"test2"}, true},
+		{[]string{"test2", "value"}, false},
+		{[]string{"test", "value2"}, false},
+		{[]string{"test", "VALUE"}, false},
+	}
+
+	for _, p := range paths {
+		if exp, actual := p.Exists, val.Exists(p.Path...); exp != actual {
+			t.Errorf("Wrong result from Exists: %v != %v, for path: %v", exp, actual, p.Path)
+		}
+		if exp, actual := p.Exists, val.ExistsP(strings.Join(p.Path, ".")); exp != actual {
+			t.Errorf("Wrong result from ExistsP: %v != %v, for path: %v", exp, actual, p.Path)
+		}
+	}
+}
+
+func TestBasicWithBuffer(t *testing.T) {
+	sample := bytes.NewReader([]byte(`{"test":{"value":10},"test2":20}`))
+
+	_, err := ParseJSONBuffer(sample)
+	if err != nil {
+		t.Errorf("Failed to parse: %v", err)
+		return
 	}
 }
 
@@ -604,6 +652,23 @@ func TestArraysTwo(t *testing.T) {
 	}
 }
 
+func TestArraysRoot(t *testing.T) {
+	sample := []byte(`["test1"]`)
+
+	val, err := ParseJSON(sample)
+	if err != nil {
+		t.Errorf("Failed to parse: %v", err)
+		return
+	}
+
+	val.ArrayAppend("test2")
+	val.ArrayAppend("test3")
+
+	if expected, actual := `["test1","test2","test3"]`, val.String(); expected != actual {
+		t.Errorf("expected %v, received: %v", expected, actual)
+	}
+}
+
 func TestLargeSample(t *testing.T) {
 	sample := []byte(`{
 		"test":{
@@ -685,8 +750,8 @@ func TestInvalid(t *testing.T) {
 	invalidJSONSamples := []string{
 		`{dfads"`,
 		``,
-		`""`,
-		`"hello"`,
+		// `""`,
+		// `"hello"`,
 		"{}\n{}",
 	}
 

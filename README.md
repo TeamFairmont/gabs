@@ -7,7 +7,7 @@ https://godoc.org/github.com/Jeffail/gabs
 ##How to install:
 
 ```bash
-go get github.com/jeffail/gabs
+go get github.com/Jeffail/gabs
 ```
 
 ##How to use
@@ -17,7 +17,7 @@ go get github.com/jeffail/gabs
 ```go
 ...
 
-import "github.com/jeffail/gabs"
+import "github.com/Jeffail/gabs"
 
 jsonParsed, err := gabs.ParseJSON([]byte(`{
 	"outter":{
@@ -42,6 +42,15 @@ value, ok = jsonParsed.Search("outter", "inner", "value1").Data().(float64)
 
 value, ok = jsonParsed.Path("does.not.exist").Data().(float64)
 // value == 0.0, ok == false
+
+exists := jsonParsed.Exists("outter", "inner", "value1")
+// exists == true
+
+exists := jsonParsed.Exists("does", "not", "exist")
+// exists == false
+
+exists := jsonParsed.ExistsP("does.not.exist")
+// exists == false
 
 ...
 ```

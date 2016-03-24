@@ -26,6 +26,7 @@ package gabs
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"io/ioutil"
 	"strings"
 )
@@ -57,6 +58,9 @@ var (
 
 	// ErrInvalidPath - The filepath was not valid.
 	ErrInvalidPath = errors.New("invalid file path")
+
+	// ErrInvalidBuffer - The input buffer contained an invalid JSON string
+	ErrInvalidBuffer = errors.New("input buffer contained invalid JSON")
 )
 
 /*---------------------------------------------------------------------------------------------------
@@ -128,6 +132,33 @@ func (g *Container) S(hierarchy ...string) *Container {
 }
 
 /*
+Exists - Checks whether a path exists.
+*/
+func (g *Container) Exists(hierarchy ...string) bool {
+	var object interface{}
+
+	object = g.object
+	for target := 0; target < len(hierarchy); target++ {
+		if mmap, ok := object.(map[string]interface{}); ok {
+			object, ok = mmap[hierarchy[target]]
+			if !ok {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
+/*
+ExistsP - Checks whether a dot notation path exists.
+*/
+func (g *Container) ExistsP(path string) bool {
+	return g.Exists(strings.Split(path, ".")...)
+}
+
+/*
 Index - Attempt to find and return an object with a JSON array by specifying the index of the
 target.
 */
@@ -187,8 +218,11 @@ constructed, and if a collision occurs with a non object type whilst iterating t
 returned.
 */
 func (g *Container) Set(value interface{}, path ...string) (*Container, error) {
+	if len(path) == 0 {
+		g.object = value
+		return g, nil
+	}
 	var object interface{}
-
 	if g.object == nil {
 		g.object = map[string]interface{}{}
 	}
@@ -432,6 +466,18 @@ func (g *Container) ArrayCountP(path string) (int, error) {
  */
 
 /*
+Bytes - Converts the contained object back to a JSON []byte blob.
+*/
+func (g *Container) Bytes() []byte {
+	if g.object != nil {
+		if bytes, err := json.Marshal(g.object); err == nil {
+			return bytes
+		}
+	}
+	return []byte("{}")
+}
+
+/*
 String - Converts the contained object back to a JSON formatted string.
 */
 func (g *Container) String() string {
@@ -466,10 +512,7 @@ func New() *Container {
 Consume - Gobble up an already converted JSON object, or a fresh map[string]interface{} object.
 */
 func Consume(root interface{}) (*Container, error) {
-	if _, ok := root.(map[string]interface{}); ok {
-		return &Container{root}, nil
-	}
-	return nil, ErrInvalidInputObj
+	return &Container{root}, nil
 }
 
 /*
@@ -481,10 +524,8 @@ func ParseJSON(sample []byte) (*Container, error) {
 	if err := json.Unmarshal(sample, &gabs.object); err != nil {
 		return nil, err
 	}
-	if _, ok := gabs.object.(map[string]interface{}); ok {
-		return &gabs, nil
-	}
-	return nil, ErrInvalidInputText
+
+	return &gabs, nil
 }
 
 /*
@@ -494,15 +535,30 @@ func ParseJSONFile(path string) (*Container, error) {
 	if len(path) > 0 {
 		cBytes, err := ioutil.ReadFile(path)
 		if err != nil {
-			container, err := ParseJSON(cBytes)
-			if err != nil {
-				return container, nil
-			}
 			return nil, err
 		}
-		return nil, err
+
+		container, err := ParseJSON(cBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		return container, nil
 	}
 	return nil, ErrInvalidPath
+}
+
+/*
+ParseJSONBuffer - Read the contents of a buffer into a representation of the parsed JSON.
+*/
+func ParseJSONBuffer(buffer io.Reader) (*Container, error) {
+	var gabs Container
+	jsonDecoder := json.NewDecoder(buffer)
+	if err := jsonDecoder.Decode(&gabs.object); err != nil {
+		return nil, err
+	}
+
+	return &gabs, nil
 }
 
 /*---------------------------------------------------------------------------------------------------
